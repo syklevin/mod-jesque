@@ -1,0 +1,23 @@
+# Apple crap
+.DS_Store
+# Build tools crap
+.gradle
+.idea
+.classpath
+.project
+.settings
+bin
+build
+target
+out
+*.iml
+*.ipr
+*.iws
+mods
+docs
+# Ruby crap
+.yardoc
+.yardopts
+# Benchmark crap
+node_modules
+vertx_classpath.txt
