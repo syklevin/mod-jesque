@@ -1,6 +1,6 @@
 {
 
-  "main": "com.gameleton.jesque.JesqueVerticle",
-  "worker": true
+  "main": "com.gameleton.jesque.JesqueAppVerticle",
+  "preserve-cwd": true
 
 }

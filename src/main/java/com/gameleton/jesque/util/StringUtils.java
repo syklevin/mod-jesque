@@ -11,8 +11,11 @@ public class StringUtils {
 
     public static Map<String, String> getQueryMap(String query)
     {
-        String[] params = query.split("&");
         Map<String, String> map = new HashMap<String, String>();
+        if(query == null || query.length() == 0){
+            return map;
+        }
+        String[] params = query.split("&");
         for (String param : params) {
             String name = param.split("=")[0];
             String value = "";

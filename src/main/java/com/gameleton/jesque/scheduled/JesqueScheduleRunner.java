@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class JesqueScheduleRunner {
 
     public static final Logger LOG = LoggerFactory.getLogger(JesqueScheduleRunner.class);
-    protected static final Integer IDLE_WAIT_TIME = 10 * 1000;
+    protected static final long IDLE_WAIT_TIME = 10 * 1000;
     protected AtomicReference<JesqueScheduleThreadState> threadState = new AtomicReference(JesqueScheduleThreadState.New);
     private final JesqueScheduleService schedulerService;
     private final Vertx vertx;
@@ -63,9 +63,9 @@ public class JesqueScheduleRunner {
     private void mainLoop(){
         schedulerService.serverCheckIn(getHostName(), new DateTime());
         schedulerService.cleanUpStaleServers();
-        DateTime findJobsUntil = new DateTime().plusMillis(IDLE_WAIT_TIME);
+        DateTime findJobsUntil = new DateTime().plusMillis((int)IDLE_WAIT_TIME);
         schedulerService.enqueueReadyJobs(findJobsUntil, getHostName());
-        timerId = this.vertx.setPeriodic(IDLE_WAIT_TIME, new Handler<Long>() {
+        timerId = this.vertx.setTimer(IDLE_WAIT_TIME, new Handler<Long>() {
             @Override
             public void handle(Long event) {
                 mainLoop();

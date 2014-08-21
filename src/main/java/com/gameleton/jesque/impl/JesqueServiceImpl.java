@@ -49,6 +49,10 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
 
     private final Config jesqueConfig;
 
+    public Config jesqueConfig() {
+      return jesqueConfig;
+    }
+
     private final Pool<Jedis> pool;
 
     public Pool<Jedis> pool() {
@@ -56,9 +60,9 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
     }
 
     private final JesqueScheduleService jesqueScheduleService;
-    private JesqueDelayedJobService jesqueDelayedJobService;
+    //private final JesqueDelayedJobService jesqueDelayedJobService;
 
-    private final JesqueDelayedJobRunner jesqueDelayedJobRunner;
+    //private final JesqueDelayedJobRunner jesqueDelayedJobRunner;
     private final JesqueScheduleRunner jesqueScheduleRunner;
 
     private Client jesqueClient;
@@ -78,7 +82,10 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
                 .withNamespace(jesqueCfg.getString("redis_namespace"));
 
         this.jesqueConfig = builder.build();
-        this.pool = PoolUtils.createJedisPool(jesqueConfig);
+
+        JedisPoolConfig poolConfig = new JedisPoolConfig();
+
+        this.pool = PoolUtils.createJedisPool(jesqueConfig, poolConfig);
 
         this.workerInfoDao = new WorkerInfoDAORedisImpl(jesqueConfig, pool);
 
@@ -86,15 +93,15 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
 
         this.jesqueAdminClient = new AdminClientImpl(jesqueConfig);
 
-        this.jesqueDelayedJobService = new JesqueDelayedJobService(this);
+        //this.jesqueDelayedJobService = new JesqueDelayedJobService(this);
 
-        this.jesqueDelayedJobRunner = new JesqueDelayedJobRunner(jesqueDelayedJobService, vertx, 20000);
+        //this.jesqueDelayedJobRunner = new JesqueDelayedJobRunner(jesqueDelayedJobService, vertx, 20000);
 
         this.jesqueScheduleService = new JesqueScheduleService(this);
 
         this.jesqueScheduleRunner = new JesqueScheduleRunner(jesqueScheduleService, vertx);
 
-        jesqueDelayedJobRunner.start();
+        //jesqueDelayedJobRunner.start();
 
         jesqueScheduleRunner.start();
 
@@ -167,60 +174,60 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         priorityEnqueue(queueName, jobClazz.getSimpleName(), args);
     }
 
-    @Override
-    public void enqueueAt(DateTime dateTime, String queueName, Job job) {
-        try {
-            jesqueDelayedJobService.enqueueAt(dateTime, queueName, job);
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-        }
-    }
+//    @Override
+//    public void enqueueAt(DateTime dateTime, String queueName, Job job) {
+//        try {
+//            jesqueDelayedJobService.enqueueAt(dateTime, queueName, job);
+//        } catch (JsonProcessingException e) {
+//            e.printStackTrace();
+//        }
+//    }
+//
+//    @Override
+//    public void enqueueAt(DateTime dateTime, String queueName, String jobName, Object... args) {
+//        enqueueAt( dateTime, queueName, new Job(jobName, args) );
+//    }
+//
+//    @Override
+//    public void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, Object... args) {
+//        enqueueAt( dateTime, queueName, jobClazz.getSimpleName(), args);
+//    }
+//
+//    @Override
+//    public void enqueueAt(DateTime dateTime, String queueName, String jobName, List args) {
+//        enqueueAt( dateTime, queueName, new Job(jobName, args) );
+//    }
+//
+//    @Override
+//    public void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, List args) {
+//        enqueueAt( dateTime, queueName, jobClazz.getSimpleName(), args );
+//    }
 
-    @Override
-    public void enqueueAt(DateTime dateTime, String queueName, String jobName, Object... args) {
-        enqueueAt( dateTime, queueName, new Job(jobName, args) );
-    }
 
-    @Override
-    public void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, Object... args) {
-        enqueueAt( dateTime, queueName, jobClazz.getSimpleName(), args);
-    }
-
-    @Override
-    public void enqueueAt(DateTime dateTime, String queueName, String jobName, List args) {
-        enqueueAt( dateTime, queueName, new Job(jobName, args) );
-    }
-
-    @Override
-    public void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, List args) {
-        enqueueAt( dateTime, queueName, jobClazz.getSimpleName(), args );
-    }
-
-
-    @Override
-    public void enqueueIn(Integer millisecondDelay, String queueName, Job job) {
-        enqueueAt( new DateTime().plusMillis(millisecondDelay), queueName, job );
-    }
-
-    @Override
-    public void enqueueIn(Integer millisecondDelay, String queueName, String jobName, Object... args) {
-        enqueueIn( millisecondDelay, queueName, new Job(jobName, args) );
-    }
-
-    @Override
-    public void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, Object... args) {
-        enqueueIn( millisecondDelay, queueName, jobClazz.getSimpleName(), args );
-    }
-
-    @Override
-    public void enqueueIn(Integer millisecondDelay, String queueName, String jobName, List args) {
-        enqueueIn( millisecondDelay, queueName, new Job(jobName, args) );
-    }
-
-    @Override
-    public void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, List args) {
-        enqueueIn( millisecondDelay, queueName, jobClazz.getSimpleName(), args );
-    }
+//    @Override
+//    public void enqueueIn(Integer millisecondDelay, String queueName, Job job) {
+//        enqueueAt( new DateTime().plusMillis(millisecondDelay), queueName, job );
+//    }
+//
+//    @Override
+//    public void enqueueIn(Integer millisecondDelay, String queueName, String jobName, Object... args) {
+//        enqueueIn( millisecondDelay, queueName, new Job(jobName, args) );
+//    }
+//
+//    @Override
+//    public void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, Object... args) {
+//        enqueueIn( millisecondDelay, queueName, jobClazz.getSimpleName(), args );
+//    }
+//
+//    @Override
+//    public void enqueueIn(Integer millisecondDelay, String queueName, String jobName, List args) {
+//        enqueueIn( millisecondDelay, queueName, new Job(jobName, args) );
+//    }
+//
+//    @Override
+//    public void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, List args) {
+//        enqueueIn( millisecondDelay, queueName, jobClazz.getSimpleName(), args );
+//    }
 
     @Override
     public Worker startWorker(String queueName, String jobName, Class jobClass, ExceptionHandler exceptionHandler,
@@ -251,10 +258,7 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
     public Worker startWorker(List<String> queues, Map<String, Class<?>> jobTypes, ExceptionHandler exceptionHandler,
                               boolean paused)
     {
-        LOG.debug("Starting worker processing queueus: " + queues);
-
         JobFactory jobFactory = new MapBasedJobFactory(jobTypes);
-
         Worker worker = new WorkerImpl(jesqueConfig, queues, jobFactory);
 
         if (exceptionHandler != null)
@@ -270,6 +274,13 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
 //        Admin admin = new AdminImpl(jesqueConfig);
 //        admin.setWorker(worker);
 
+        //        vertx.runOnContext(new Handler<Void>() {
+//            @Override
+//            public void handle(Void event) {
+//                admin.run();
+//            }
+//        });
+
         //add listener for removing workers list when it stopped
         WorkerLifecycleListener workerLifeCycleListener = new WorkerLifecycleListener(this);
         worker.getWorkerEventEmitter().addListener(workerLifeCycleListener, WorkerEvent.WORKER_STOP);
@@ -281,12 +292,7 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
             }
         });
 
-//        vertx.runOnContext(new Handler<Void>() {
-//            @Override
-//            public void handle(Void event) {
-//                admin.run();
-//            }
-//        });
+
 
         return worker;
     }
@@ -295,7 +301,7 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
     public void stop() {
         LOG.info("Stopping ${workers.size()} jesque workers");
 
-        jesqueDelayedJobRunner.stop();
+        //jesqueDelayedJobRunner.stop();
 
         jesqueScheduleRunner.stop();
 
@@ -303,7 +309,7 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
             try{
                 LOG.debug("Stopping worker processing queues: " + worker.getQueues());
                 worker.end(true);
-                worker.join(5000);
+                //worker.join(5000);
             } catch(Exception ex) {
                 LOG.error("Exception ending jesque worker", ex);
             }
@@ -325,8 +331,9 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
                 schedule(cronName, cronExpression, jobQueue, jobName, args);
             }
             else if(jobCfg.containsField("deplay")){
-                int delay = jobCfg.getInteger("deplay");
-                enqueueIn(delay, jobQueue, jobName, args);
+//                int delay = jobCfg.getInteger("deplay");
+//                enqueueIn(delay, jobQueue, jobName, args);
+                LOG.info("deplay job not implemented");
             }
             else{
                 enqueue(jobQueue, jobName, args);
@@ -338,8 +345,6 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         JsonObject workerCfg;
         List queueNames;
         Map<String, Class<?>> jobTypes = new HashMap<>();
-        int threads;
-        boolean startPaused;
         for (int i = 0; i < workersCfg.size(); i++) {
             workerCfg = workersCfg.get(i);
             queueNames = workerCfg.getArray("queueNames").toList();
@@ -352,11 +357,7 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
                     LOG.error("Failed to load class of " + entry.getValue());
                 }
             }
-            threads = workerCfg.getInteger("threads", 1);
-            startPaused = workerCfg.getBoolean("startPaused", false);
-            for(int t=0; t<threads; t++){
-                startWorker(queueNames, jobTypes, null, startPaused);
-            }
+            startWorker(queueNames, jobTypes, null, workerCfg.getBoolean("startPaused", false));
         }
     }
 

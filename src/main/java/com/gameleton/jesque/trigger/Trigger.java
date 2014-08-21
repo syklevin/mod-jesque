@@ -9,7 +9,8 @@ import java.util.Map;
  * Created by levin on 8/14/2014.
  */
 public class Trigger {
-    public static final String REDIS_PREFIX = "trigger";
+
+    public static final String TRIGGER_PREFIX = "trigger";
     public static final String TRIGGER_NEXTFIRE_INDEX = "trigger:nextFireTime:WAITING:sorted";
 
     private String jobName;
@@ -36,15 +37,15 @@ public class Trigger {
     }
 
     public String getRedisKey() {
-        return REDIS_PREFIX + ":" + getJobName();
+        return TRIGGER_PREFIX + ":" + getJobName();
     }
 
     public static String getRedisKeyForJobName(String jobName) {
-        return REDIS_PREFIX + ":" + jobName;
+        return TRIGGER_PREFIX + ":" + jobName;
     }
 
     public static String getAcquiredIndexByHostName(String hostName) {
-        return REDIS_PREFIX + ":state:" + TriggerState.Acquired.name() + ":" + hostName;
+        return TRIGGER_PREFIX + ":state:" + TriggerState.Acquired.name() + ":" + hostName;
     }
 
     public String getJobName() {

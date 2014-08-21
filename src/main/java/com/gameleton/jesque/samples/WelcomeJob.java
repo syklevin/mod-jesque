@@ -3,9 +3,11 @@ package com.gameleton.jesque.samples;
 /**
  * Created by levin on 8/15/2014.
  */
-public class WelcomeJob {
+public class WelcomeJob implements Runnable {
 
-    public void perform(){
+
+    @Override
+    public void run() {
         System.out.println("WelcomeJob");
     }
 }

@@ -43,74 +43,98 @@ public class JesqueDelayedJobService {
     }
 
     public void enqueueReadyJobs() {
-        Jedis redis = pool.getResource();
-        long maxScore = new DateTime().getMillis();
-        Set<String> queueNames = redis.smembers(RESQUE_DELAYED_JOBS_PREFIX + ":queues");
-        for (String queueName : queueNames) {
-            Set<String> jobsTimestamps = redis.zrangeByScore(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName, 0, maxScore);
-            for (String jobsTimestamp : jobsTimestamps) {
-                String jobString = redis.lpop(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName + ":" + jobsTimestamp);
-                if(jobString != null){
-                    try {
-                        Job job = ObjectMapperFactory.get().readValue(jobString, Job.class);
-                        jesqueService.enqueue(queueName, job);
-                    } catch (IOException ex) {
-                        LOG.error("enqueueReadyJobs exception of " + jobString, ex);
+        Jedis redis = null;
+        try {
+            redis = pool.getResource();
+            long maxScore = new DateTime().getMillis();
+            Set<String> queueNames = redis.smembers(RESQUE_DELAYED_JOBS_PREFIX + ":queues");
+            for (String queueName : queueNames) {
+                Set<String> jobsTimestamps = redis.zrangeByScore(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName, 0, maxScore);
+                for (String jobsTimestamp : jobsTimestamps) {
+                    String jobString = redis.lpop(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName + ":" + jobsTimestamp);
+                    if (jobString != null) {
+                        try {
+                            Job job = ObjectMapperFactory.get().readValue(jobString, Job.class);
+                            jesqueService.enqueue(queueName, job);
+                        } catch (IOException ex) {
+                            LOG.error("enqueueReadyJobs exception of " + jobString, ex);
+                        }
+                    } else {
+                        deleteQueueTimestampListIfEmpty(queueName, jobsTimestamp);
                     }
-                }else{
-                    deleteQueueTimestampListIfEmpty(queueName, jobsTimestamp);
                 }
             }
+        }
+        finally {
+            pool.returnResource(redis);
         }
     }
 
     public DateTime nextFireTime() {
-        Jedis redis = pool.getResource();
-        Set<String> queueNames = redis.smembers(RESQUE_DELAYED_JOBS_PREFIX + ":queues");
-        long minTimestamp = Long.MAX_VALUE;
-        for (String queueName : queueNames) {
-            Set<String> timestamps = redis.zrangeByScore(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName, "0", "inf", 0, 1 );
-            if(timestamps != null && timestamps.size() > 0) {
-                minTimestamp = Long.parseLong(timestamps.iterator().next());
-                break; //break the loop
+        Jedis redis = null;
+        try {
+            redis = pool.getResource();
+            Set<String> queueNames = redis.smembers(RESQUE_DELAYED_JOBS_PREFIX + ":queues");
+            long minTimestamp = Long.MAX_VALUE;
+            for (String queueName : queueNames) {
+                Set<String> timestamps = redis.zrangeByScore(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName, "0", "inf", 0, 1 );
+                if(timestamps != null && timestamps.size() > 0) {
+                    minTimestamp = Long.parseLong(timestamps.iterator().next());
+                    break; //break the loop
+                }
             }
+            return new DateTime( minTimestamp );
         }
-        return new DateTime( minTimestamp );
+        finally {
+            pool.returnResource(redis);
+        }
     }
 
     protected void deleteQueueTimestampListIfEmpty(String queueName, String timestamp) {
         String queueTimestampKey = RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName + ":" + timestamp;
 
-        Jedis redis = pool.getResource();
+        Jedis redis = null;
+        try {
+            redis = pool.getResource();
 
-        redis.watch(queueTimestampKey);
-        long length = redis.llen( queueTimestampKey);
+            redis.watch(queueTimestampKey);
+            long length = redis.llen( queueTimestampKey);
 
-        if( length == 0 ) {
-            Transaction transaction = redis.multi();
-            transaction.del( queueTimestampKey);
-            transaction.zrem(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName, timestamp);
-            transaction.exec();
-        } else {
-            redis.unwatch();
+            if( length == 0 ) {
+                Transaction transaction = redis.multi();
+                transaction.del( queueTimestampKey);
+                transaction.zrem(RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName, timestamp);
+                transaction.exec();
+            } else {
+                redis.unwatch();
+            }
+        }
+        finally {
+            pool.returnResource(redis);
         }
     }
 
     protected void deleteDelayedQueueIfEmpty(String queueName) {
         String queueKey = RESQUE_DELAYED_JOBS_PREFIX + ":" + queueName;
 
-        Jedis redis = pool.getResource();
+        Jedis redis = null;
+        try {
+            redis = pool.getResource();
 
-        redis.watch(queueKey);
-        long length = redis.zcard(queueKey);
+            redis.watch(queueKey);
+            long length = redis.zcard(queueKey);
 
-        if( length == 0) {
-            Transaction transaction = redis.multi();
-            transaction.del(queueKey);
-            transaction.srem(RESQUE_DELAYED_JOBS_PREFIX + ":queues", queueName);
-            transaction.exec();
-        } else {
-            redis.unwatch();
+            if( length == 0) {
+                Transaction transaction = redis.multi();
+                transaction.del(queueKey);
+                transaction.srem(RESQUE_DELAYED_JOBS_PREFIX + ":queues", queueName);
+                transaction.exec();
+            } else {
+                redis.unwatch();
+            }
+        }
+        finally {
+            pool.returnResource(redis);
         }
     }
 

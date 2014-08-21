@@ -1,21 +1,11 @@
 apply from: "$rootDir/gradle/vertx.gradle"
 
-repositories {
-    maven { url 'http://repo.acsdev.net/content/repositories/snapshots' }
-}
-
 dependencies {
-
     compile 'com.google.inject:guice:3.0'
     compile 'net.greghaines:jesque:2.0.0'
     compile 'joda-time:joda-time:2.3'
-
     compile 'redis.clients:jedis:2.5.1'
-
     compile 'org.slf4j:slf4j-api:1.7.7'
-    compile 'ch.qos.logback:logback-classic:1.1.2'
-    compile 'ch.qos.logback:logback-core:1.1.2'
-
 }
 
 test {

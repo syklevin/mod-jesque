@@ -1,18 +1,15 @@
 {
   "jesque": {
-      "redis_host": "192.168.0.132",
+      "redis_host": "192.168.0.235",
       "redis_port": 6379,
-      "redis_namespace": "",
-      "admin_port": 10120
+      "redis_namespace": "resque"
   },
   "jesqueWeb": {
     "host": "localhost",
-    "port": 9898,
-    "dir": ""
+    "port": 12880
   },
   "workers": [{
-      "threads": 1,
-      "startPaused", false,
+      "startPaused": false,
       "queueNames": [
         "helloQueue"
       ],
@@ -21,24 +18,14 @@
         "HelloJob": "com.gameleton.jesque.samples.HelloJob"
       }
   }],
-  "jobs": [{
-    "jobQueue": "helloQueue",
-    "jobName": "HelloJob",
-    "args": []
-  },
-  {
-    "cronName": "helloCron",
-    "cronExpression": "0 0 23 * * ? *",
-    "jobQueue": "helloQueue",
-    "jobName": "HelloJob",
-    "args": []
-  },
-  {
-    "delay": "5000",
-    "jobQueue": "helloQueue",
-    "jobName": "WelcomeJob",
-    "args": []
-  }
+  "jobs": [
+    {
+      "cronName": "helloCron",
+      "cronExpression": "* * * * * ? *",
+      "jobQueue": "helloQueue",
+      "jobName": "HelloJob",
+      "args": []
+    }
   ]
 
 }

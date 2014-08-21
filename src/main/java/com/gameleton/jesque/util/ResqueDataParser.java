@@ -2,11 +2,14 @@ package com.gameleton.jesque.util;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gameleton.jesque.scheduled.ScheduledJob;
 import net.greghaines.jesque.Job;
 import net.greghaines.jesque.JobFailure;
 import net.greghaines.jesque.WorkerStatus;
+import net.greghaines.jesque.meta.KeyInfo;
 import net.greghaines.jesque.meta.QueueInfo;
 import net.greghaines.jesque.meta.WorkerInfo;
+import org.joda.time.DateTimeZone;
 import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
 
@@ -24,8 +27,10 @@ public class ResqueDataParser {
         json.putNumber("size", queueInfo.getSize());
 
         JsonArray jobs = new JsonArray();
-        for (Job job : queueInfo.getJobs()) {
-            jobs.add(parseJob(job));
+        if(queueInfo.getJobs() != null){
+            for (Job job : queueInfo.getJobs()) {
+                jobs.add(parseJob(job));
+            }
         }
         json.putArray("jobs", jobs);
         return json;
@@ -64,7 +69,6 @@ public class ResqueDataParser {
     }
 
     public static JsonObject parseJobFailure(JobFailure jobFailure){
-
         JsonObject json = new JsonObject();
         json.putString("worker", jobFailure.getWorker());
         json.putString("queue", jobFailure.getQueue());
@@ -73,12 +77,27 @@ public class ResqueDataParser {
         json.putString("error", jobFailure.getError());
         json.putString("failedAt", jobFailure.getFailedAt().toString());
         json.putString("retriedAt", jobFailure.getRetriedAt().toString());
-
-
         return json;
     }
 
+    public static JsonObject parseKeyInfo(KeyInfo keyInfo){
+        JsonObject json = new JsonObject();
+        json.putString("name", keyInfo.getName());
+        json.putString("namespace", keyInfo.getNamespace());
+        json.putString("type", keyInfo.getType().name());
+        json.putNumber("size", keyInfo.getSize());
+        json.putArray("arrayValue", new JsonArray((List)keyInfo.getArrayValue()));
+        return json;
+    }
 
-
-
+    public static JsonObject parseScheduledJob(ScheduledJob scheduledJob){
+        JsonObject json = new JsonObject();
+        json.putString("name", scheduledJob.getName());
+        json.putString("cronExpression", scheduledJob.getCronExpression());
+        json.putString("timeZone", scheduledJob.getTimeZone().toString());
+        json.putString("jesqueJobName", scheduledJob.getJesqueJobName());
+        json.putString("jesqueJobQueue", scheduledJob.getJesqueJobQueue());
+        json.putArray("args", new JsonArray((List)scheduledJob.getArgs()));
+        return json;
+    }
 }

@@ -1,5 +1,6 @@
 package com.gameleton.jesque;
 
+import net.greghaines.jesque.Config;
 import net.greghaines.jesque.Job;
 import net.greghaines.jesque.worker.ExceptionHandler;
 import net.greghaines.jesque.worker.Worker;
@@ -22,6 +23,8 @@ public interface JesqueService {
     Vertx vertx();
 
     Pool<Jedis> pool();
+
+    Config jesqueConfig();
 
     void schedule(String jobName, String cronExpressionString, String jesqueJobQueue, String jesqueJobName, Object... args);
 
@@ -47,25 +50,25 @@ public interface JesqueService {
 
     void priorityEnqueue(String queueName, Class jobClazz, Object... args);
 
-    void enqueueAt(DateTime dateTime, String queueName, Job job);
+//    void enqueueAt(DateTime dateTime, String queueName, Job job);
+//
+//    void enqueueAt(DateTime dateTime, String queueName, String jobName, Object... args);
+//
+//    void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, Object... args);
+//
+//    void enqueueAt(DateTime dateTime, String queueName, String jobName, List args);
+//
+//    void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, List args);
 
-    void enqueueAt(DateTime dateTime, String queueName, String jobName, Object... args);
-
-    void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, Object... args);
-
-    void enqueueAt(DateTime dateTime, String queueName, String jobName, List args);
-
-    void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, List args);
-
-    void enqueueIn(Integer millisecondDelay, String queueName, Job job);
-
-    void enqueueIn(Integer millisecondDelay, String queueName, String jobName, Object... args);
-
-    void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, Object... args);
-
-    void enqueueIn(Integer millisecondDelay, String queueName, String jobName, List args);
-
-    void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, List args);
+//    void enqueueIn(Integer millisecondDelay, String queueName, Job job);
+//
+//    void enqueueIn(Integer millisecondDelay, String queueName, String jobName, Object... args);
+//
+//    void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, Object... args);
+//
+//    void enqueueIn(Integer millisecondDelay, String queueName, String jobName, List args);
+//
+//    void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, List args);
 
     Worker startWorker(String queueName, String jobName, Class jobClass, ExceptionHandler exceptionHandler,
                        boolean paused);
