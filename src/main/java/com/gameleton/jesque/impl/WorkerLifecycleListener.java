@@ -1,6 +1,5 @@
 package com.gameleton.jesque.impl;
 
-import com.gameleton.jesque.JesqueService;
 import net.greghaines.jesque.Job;
 import net.greghaines.jesque.worker.Worker;
 import net.greghaines.jesque.worker.WorkerEvent;

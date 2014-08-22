@@ -1,7 +1,7 @@
 package com.gameleton.jesque.deplayed;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.gameleton.jesque.JesqueService;
+import com.gameleton.jesque.impl.JesqueService;
 import net.greghaines.jesque.Job;
 import net.greghaines.jesque.json.ObjectMapperFactory;
 import org.joda.time.DateTime;

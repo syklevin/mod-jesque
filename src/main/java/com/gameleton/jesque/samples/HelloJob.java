@@ -1,5 +1,6 @@
 package com.gameleton.jesque.samples;
 
+import com.google.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,8 +13,12 @@ public class HelloJob implements Runnable {
 
     public static final Logger LOG = LoggerFactory.getLogger(HelloJob.class);
 
+    @Inject
+    private SimpleService service;
+
     @Override
     public void run() {
-        LOG.info("HelloJob " + String.valueOf(System.currentTimeMillis()));
+        service.serve();
+        //LOG.info("HelloJob " + String.valueOf(System.currentTimeMillis()));
     }
 }

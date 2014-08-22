@@ -1,17 +1,14 @@
 package com.gameleton.jesque.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.gameleton.jesque.deplayed.JesqueDelayedJobRunner;
-import com.gameleton.jesque.deplayed.JesqueDelayedJobService;
 import com.gameleton.jesque.scheduled.JesqueScheduleRunner;
 import com.gameleton.jesque.scheduled.JesqueScheduleService;
+import com.google.inject.Inject;
+import com.google.inject.Injector;
 import net.greghaines.jesque.Config;
 import net.greghaines.jesque.ConfigBuilder;
 import net.greghaines.jesque.Job;
-import net.greghaines.jesque.admin.Admin;
 import net.greghaines.jesque.admin.AdminClient;
 import net.greghaines.jesque.admin.AdminClientImpl;
-import net.greghaines.jesque.admin.AdminImpl;
 import net.greghaines.jesque.client.Client;
 import net.greghaines.jesque.client.ClientImpl;
 import net.greghaines.jesque.meta.WorkerInfo;
@@ -19,7 +16,6 @@ import net.greghaines.jesque.meta.dao.WorkerInfoDAO;
 import net.greghaines.jesque.meta.dao.impl.WorkerInfoDAORedisImpl;
 import net.greghaines.jesque.utils.PoolUtils;
 import net.greghaines.jesque.worker.*;
-import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,139 +33,114 @@ import java.util.*;
 /**
  * Created by levin on 8/14/2014.
  */
-public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
+public class JesqueService {
 
-    public static final Logger LOG = LoggerFactory.getLogger(JesqueServiceImpl.class);
+    public static final Logger LOG = LoggerFactory.getLogger(JesqueService.class);
 
     private final Vertx vertx;
+    private final JsonObject config;
+    private final Injector injector;
 
     public Vertx vertx() {
       return vertx;
     }
-
-    private final Config jesqueConfig;
-
+    private Config jesqueConfig;
     public Config jesqueConfig() {
       return jesqueConfig;
     }
-
-    private final Pool<Jedis> pool;
-
+    private Pool<Jedis> pool;
     public Pool<Jedis> pool() {
       return pool;
     }
 
-    private final JesqueScheduleService jesqueScheduleService;
-    //private final JesqueDelayedJobService jesqueDelayedJobService;
-
-    //private final JesqueDelayedJobRunner jesqueDelayedJobRunner;
-    private final JesqueScheduleRunner jesqueScheduleRunner;
+    private JesqueScheduleService jesqueScheduleService;
+    private JesqueScheduleRunner jesqueScheduleRunner;
 
     private Client jesqueClient;
     private WorkerInfoDAO workerInfoDao;
     private List<Worker> workers = Collections.synchronizedList(new ArrayList<Worker>());
     private AdminClient jesqueAdminClient;
 
-    public JesqueServiceImpl(Vertx vertx, JsonObject config){
+    @Inject
+    public JesqueService(Vertx vertx, Injector injector){
         this.vertx = vertx;
+        this.injector = injector;
+        this.config = new JsonObject();
+    }
+
+    public void configure(JsonObject config){
+        this.config.mergeIn(config);
+    }
+
+    public void start(){
 
         ConfigBuilder builder = new ConfigBuilder();
-
         JsonObject jesqueCfg = config.getObject("jesque");
-
         builder.withHost(jesqueCfg.getString("redis_host"))
                 .withPort(jesqueCfg.getInteger("redis_port"))
                 .withNamespace(jesqueCfg.getString("redis_namespace"));
-
         this.jesqueConfig = builder.build();
-
         JedisPoolConfig poolConfig = new JedisPoolConfig();
-
         this.pool = PoolUtils.createJedisPool(jesqueConfig, poolConfig);
-
         this.workerInfoDao = new WorkerInfoDAORedisImpl(jesqueConfig, pool);
-
         this.jesqueClient = new ClientImpl(jesqueConfig);
-
         this.jesqueAdminClient = new AdminClientImpl(jesqueConfig);
-
         //this.jesqueDelayedJobService = new JesqueDelayedJobService(this);
-
         //this.jesqueDelayedJobRunner = new JesqueDelayedJobRunner(jesqueDelayedJobService, vertx, 20000);
-
         this.jesqueScheduleService = new JesqueScheduleService(this);
-
         this.jesqueScheduleRunner = new JesqueScheduleRunner(jesqueScheduleService, vertx);
-
         //jesqueDelayedJobRunner.start();
-
         jesqueScheduleRunner.start();
-
         JsonArray workersCfg = config.getArray("workers");
-
         JsonArray jobsCfg = config.getArray("jobs");
-
         startWorkersFromConfig(workersCfg);
-
         startJobsFromConfig(jobsCfg);
     }
 
-    @Override
     public void schedule(String jobName, String cronExpressionString, String jesqueJobQueue, String jesqueJobName, Object... args) {
         jesqueScheduleService.schedule(jobName, cronExpressionString, jesqueJobQueue, jesqueJobName, Arrays.asList(args));
     }
 
-    @Override
     public void schedule(String jobName, String cronExpressionString, String jesqueJobQueue, String jesqueJobName, List args) {
         jesqueScheduleService.schedule(jobName, cronExpressionString, DateTimeZone.getDefault(), jesqueJobQueue, jesqueJobName, args);
     }
 
-    @Override
     public void schedule(String jobName, String cronExpressionString, DateTimeZone timeZone, String jesqueJobQueue, String jesqueJobName, Object... args) {
         jesqueScheduleService.schedule(jobName, cronExpressionString, timeZone, jesqueJobQueue, jesqueJobName, Arrays.asList(args));
     }
 
-    @Override
     public void schedule(String jobName, String cronExpressionString, DateTimeZone timeZone, String jesqueJobQueue, String jesqueJobName, List args) {
         jesqueScheduleService.schedule(jobName, cronExpressionString, timeZone, jesqueJobQueue, jesqueJobName, args);
     }
 
-    @Override
     public void enqueue(String queueName, Job job) {
         jesqueClient.enqueue(queueName, job);
     }
 
-    @Override
     public void enqueue(String queueName, String jobName, List args) {
         enqueue(queueName, new Job(jobName, args));
     }
 
-    @Override
     public void enqueue(String queueName, Class jobClazz, List args) {
         enqueue(queueName, jobClazz.getSimpleName(), args);
     }
 
-    @Override
     public void enqueue(String queueName, String jobName, Object... args) {
         enqueue(queueName, new Job(jobName, args));
     }
 
-    @Override
     public void enqueue(String queueName, Class jobClazz, Object... args) {
         enqueue(queueName, jobClazz.getSimpleName(), args);
     }
 
-    @Override
     public void priorityEnqueue(String queueName, Job job) {
         jesqueClient.priorityEnqueue(queueName, job);
     }
 
-    @Override
     public void priorityEnqueue(String queueName, String jobName, Object... args) {
         priorityEnqueue(queueName, new Job(jobName, args));
     }
 
-    @Override
     public void priorityEnqueue(String queueName, Class jobClazz, Object... args) {
         priorityEnqueue(queueName, jobClazz.getSimpleName(), args);
     }
@@ -229,7 +200,6 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
 //        enqueueIn( millisecondDelay, queueName, jobClazz.getSimpleName(), args );
 //    }
 
-    @Override
     public Worker startWorker(String queueName, String jobName, Class jobClass, ExceptionHandler exceptionHandler,
                               boolean paused)
     {
@@ -238,7 +208,6 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         return startWorker(Arrays.asList(queueName), jobTypes, exceptionHandler, paused);
     }
 
-    @Override
     public Worker startWorker(List queueName, String jobName, Class jobClass, ExceptionHandler exceptionHandler,
                               boolean paused)
     {
@@ -247,19 +216,17 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         return startWorker(queueName, jobTypes, exceptionHandler, paused);
     }
 
-    @Override
     public Worker startWorker(String queueName, Map<String, Class<?>> jobTypes, ExceptionHandler exceptionHandler,
                               boolean paused)
     {
         return startWorker(Arrays.asList(queueName), jobTypes, exceptionHandler, paused);
     }
 
-    @Override
     public Worker startWorker(List<String> queues, Map<String, Class<?>> jobTypes, ExceptionHandler exceptionHandler,
                               boolean paused)
     {
         JobFactory jobFactory = new MapBasedJobFactory(jobTypes);
-        Worker worker = new WorkerImpl(jesqueConfig, queues, jobFactory);
+        Worker worker = new GuiceAwareWorker(injector, jesqueConfig, queues, jobFactory);
 
         if (exceptionHandler != null)
             worker.setExceptionHandler(exceptionHandler);
@@ -297,7 +264,6 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         return worker;
     }
 
-    @Override
     public void stop() {
         LOG.info("Stopping ${workers.size()} jesque workers");
 
@@ -361,7 +327,6 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         }
     }
 
-    @Override
     public void pruneWorkers() {
         try {
             final String hostName = InetAddress.getLocalHost().getHostName();
@@ -378,13 +343,11 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         }
     }
 
-    @Override
     public void removeWorkerFromLifecycleTracking(Worker worker) {
         LOG.debug("Removing worker " + worker.getName() + " from lifecycle tracking");
         workers.remove(worker);
     }
 
-    @Override
     public void pauseAllWorkersOnThisNode() {
         LOG.info("Pausing all " + workers.size() + " jesque workers on this node");
 
@@ -394,7 +357,6 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         });
     }
 
-    @Override
     public void resumeAllWorkersOnThisNode() {
         LOG.info("Resuming all " + workers.size() + " jesque workers on this node");
 
@@ -404,25 +366,21 @@ public class JesqueServiceImpl implements com.gameleton.jesque.JesqueService {
         });
     }
 
-    @Override
     public void pauseAllWorkersInCluster() {
         LOG.debug("Pausing all workers in the cluster");
         jesqueAdminClient.togglePausedWorkers(true);
     }
 
-    @Override
     public void resumeAllWorkersInCluster() {
         LOG.debug("Resuming all workers in the cluster");
         jesqueAdminClient.togglePausedWorkers(false);
     }
 
-    @Override
     public void shutdownAllWorkersInCluster() {
         LOG.debug("Shutting down all workers in the cluster");
         jesqueAdminClient.shutdownWorkers(true);
     }
 
-    @Override
     public boolean areAllWorkersInClusterPaused() {
         return workerInfoDao.getActiveWorkerCount() == 0;
     }

@@ -25,7 +25,7 @@ import java.util.TreeSet;
  * Cron expressions are comprised of 6 required fields and one optional field
  * separated by white space. The fields respectively are described as follows:
  *
- * <table cellspacing="8">
+ * <table summary="" cellspacing="8">
  * <tr>
  * <th align="left">Field Name</th>
  * <th align="left">&nbsp;</th>
@@ -35,51 +35,51 @@ import java.util.TreeSet;
  * </tr>
  * <tr>
  * <td align="left"><code>Seconds</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>0-59</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>, - * /</code></td>
  * </tr>
  * <tr>
  * <td align="left"><code>Minutes</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>0-59</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>, - * /</code></td>
  * </tr>
  * <tr>
  * <td align="left"><code>Hours</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>0-23</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>, - * /</code></td>
  * </tr>
  * <tr>
  * <td align="left"><code>Day-of-month</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>1-31</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>, - * ? / L W</code></td>
  * </tr>
  * <tr>
  * <td align="left"><code>Month</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>1-12 or JAN-DEC</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>, - * /</code></td>
  * </tr>
  * <tr>
  * <td align="left"><code>Day-of-Week</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>1-7 or SUN-SAT</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>, - * ? / L #</code></td>
  * </tr>
  * <tr>
  * <td align="left"><code>Year (Optional)</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>empty, 1970-2199</code></td>
- * <td align="left">&nbsp;</th>
+ * <td align="left">&nbsp;</td>
  * <td align="left"><code>, - * /</code></td>
  * </tr>
  * </table>
@@ -150,18 +150,17 @@ import java.util.TreeSet;
  * only be one expression in the day-of-week field (&quot;3#1,6#3&quot; is
  * not valid, since there are two expressions).
  * <P>
- * <!--The 'C' character is allowed for the day-of-month and day-of-week fields.
  * This character is short-hand for "calendar". This means values are
  * calculated against the associated calendar, if any. If no calendar is
  * associated, then it is equivalent to having an all-inclusive calendar. A
  * value of "5C" in the day-of-month field means "the first day included by the
  * calendar on or after the 5th". A value of "1C" in the day-of-week field
- * means "the first day included by the calendar on or after Sunday".-->
+ * means "the first day included by the calendar on or after Sunday".
  * <P>
  * The legal characters and the names of months and days of the week are not
  * case sensitive.
  *
- * <p>
+ * <P>
  * <b>NOTES:</b>
  * <ul>
  * <li>Support for specifying both a day-of-week and a day-of-month value is
@@ -175,7 +174,6 @@ import java.util.TreeSet;
  * interpretation CronExpression chooses. An example would be
  * "0 0 14-6 ? * FRI-MON". </li>
  * </ul>
- * </p>
  *
  *
  * @author Sharada Jambula, James House

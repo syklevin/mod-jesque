@@ -1,7 +1,6 @@
 package com.gameleton.jesque.scheduled;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.gameleton.jesque.JesqueService;
+import com.gameleton.jesque.impl.JesqueService;
 import com.gameleton.jesque.trigger.TriggerDaoService;
 import com.gameleton.jesque.util.CronExpression;
 import com.gameleton.jesque.trigger.Trigger;

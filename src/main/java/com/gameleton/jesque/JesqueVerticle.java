@@ -1,14 +1,12 @@
 package com.gameleton.jesque;
 
 import com.gameleton.jesque.admin.JesqueAdminServiceImpl;
-import com.gameleton.jesque.impl.JesqueServiceImpl;
-import net.greghaines.jesque.Config;
-import net.greghaines.jesque.ConfigBuilder;
-import net.greghaines.jesque.Job;
-import net.greghaines.jesque.client.Client;
-import net.greghaines.jesque.client.ClientImpl;
-import net.greghaines.jesque.worker.*;
-import org.vertx.java.busmods.BusModBase;
+import com.gameleton.jesque.impl.JesqueModule;
+import com.gameleton.jesque.impl.JesqueService;
+import com.gameleton.jesque.samples.SimpleModule;
+import com.google.inject.Guice;
+import com.google.inject.Injector;
+import com.google.inject.Module;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.json.JsonObject;
@@ -24,13 +22,25 @@ public class JesqueVerticle extends Verticle implements Handler<Message<JsonObje
     private JesqueService jesqueService;
     private JesqueAdminServiceImpl jesqueAdminServiceImpl;
 
+    protected Injector setupGuice(Module... modules) {
+        List<Module> allModules = new ArrayList<>();
+        allModules.add(new JesqueModule(vertx));
+        for (Module m : modules) {
+            allModules.add(m);
+        }
+        Injector injector = Guice.createInjector(allModules);
+        return injector;
+    }
+
     @Override
     public void start() {
 
-        JsonObject config = container.config();
+        Injector injector = setupGuice(new SimpleModule());
+        jesqueService = injector.getInstance(JesqueService.class);
+        jesqueService.configure(container.config());
+        jesqueService.start();
 
-        jesqueService = new JesqueServiceImpl(vertx, config);
-        jesqueAdminServiceImpl = new JesqueAdminServiceImpl(vertx, config);
+        //jesqueAdminServiceImpl = new JesqueAdminServiceImpl(vertx, config);
     }
 
     @Override

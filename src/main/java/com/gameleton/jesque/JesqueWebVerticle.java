@@ -1,19 +1,10 @@
 package com.gameleton.jesque;
 
 import com.gameleton.jesque.admin.JesqueAdminServiceImpl;
-import com.gameleton.jesque.impl.JesqueServiceImpl;
 import com.gameleton.jesque.util.StringUtils;
-import net.greghaines.jesque.Config;
-import net.greghaines.jesque.ConfigBuilder;
-import net.greghaines.jesque.Job;
-import net.greghaines.jesque.client.Client;
-import net.greghaines.jesque.client.ClientImpl;
-import net.greghaines.jesque.worker.*;
-import org.vertx.java.busmods.BusModBase;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
-import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.http.HttpServer;
 import org.vertx.java.core.http.HttpServerRequest;
 import org.vertx.java.core.http.RouteMatcher;
