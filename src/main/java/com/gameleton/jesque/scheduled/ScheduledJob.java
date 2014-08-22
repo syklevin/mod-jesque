@@ -12,8 +12,9 @@ import java.util.Map;
  * Created by levin on 8/14/2014.
  */
 public class ScheduledJob {
-    public static final String REDIS_PREFIX = "job";
-    public static final String JOB_INDEX = "job:all";
+
+    public static final String SCHEDULED_JOB_PREFIX = "job";
+    public static final String SCHEDULED_JOBS = "jobs";
 
     private String name;
     private String cronExpression;
@@ -34,10 +35,6 @@ public class ScheduledJob {
         return job;
     }
 
-    public static String getRedisKeyForName(String name) {
-        return REDIS_PREFIX + ":" + name;
-    }
-
     public Map<String, String> toRedisHash() {
         JsonArray argsJson = new JsonArray(getArgs());
         Map<String, String> map = new HashMap<>();
@@ -50,9 +47,13 @@ public class ScheduledJob {
         return map;
     }
 
-    public String getRedisKey() {
-        return REDIS_PREFIX + ":" + getName();
-    }
+//    public static String getRedisKeyForName(String name) {
+//        return REDIS_PREFIX + ":" + name;
+//    }
+
+//    public String getRedisKey() {
+//        return REDIS_PREFIX + ":" + getName();
+//    }
 
     public String getName() {
         return name;

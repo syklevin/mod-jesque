@@ -2,21 +2,21 @@ package com.gameleton.jesque.scheduled;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.gameleton.jesque.JesqueService;
+import com.gameleton.jesque.trigger.TriggerDaoService;
 import com.gameleton.jesque.util.CronExpression;
 import com.gameleton.jesque.trigger.Trigger;
 import com.gameleton.jesque.trigger.TriggerField;
-import com.gameleton.jesque.trigger.TriggerPersistor;
 import com.gameleton.jesque.trigger.TriggerState;
 import net.greghaines.jesque.Job;
 import net.greghaines.jesque.json.ObjectMapperFactory;
 import net.greghaines.jesque.utils.JesqueUtils;
+import net.greghaines.jesque.utils.PoolUtils;
 import net.greghaines.jesque.utils.ResqueConstants;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.Seconds;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.vertx.java.core.Handler;
 import org.vertx.java.core.Vertx;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Transaction;
@@ -41,7 +41,9 @@ public class JesqueScheduleService {
     private final Vertx vertx;
 
     private final String namespace;
-    
+    private final ScheduledJobDaoService scheduledJobDaoService;
+    private final TriggerDaoService triggerDaoService;
+
     public Vertx vertx() {
       return vertx;
     }
@@ -51,6 +53,8 @@ public class JesqueScheduleService {
         this.vertx = service.vertx();
         this.pool = service.pool();
         this.namespace = service.jesqueConfig().getNamespace();
+        this.scheduledJobDaoService = new ScheduledJobDaoService(service.jesqueConfig(), service.pool());
+        this.triggerDaoService = new TriggerDaoService(service.jesqueConfig(), service.pool());
     }
 
     public void schedule(String jobName, String cronExpressionString, String jesqueJobQueue, String jesqueJobName, Object... args) {
@@ -65,107 +69,111 @@ public class JesqueScheduleService {
         schedule(jobName, cronExpressionString, timeZone, jesqueJobQueue, jesqueJobName, Arrays.asList(args));
     }
 
-    public void schedule(String jobName, String cronExpressionString, DateTimeZone timeZone, String jesqueJobQueue, String jesqueJobName, List args) {
+    public void schedule(final String jobName, final String cronExpressionString, final DateTimeZone timeZone, final String jesqueJobQueue, final String jesqueJobName, final List args) {
 
-        CronExpression cronExpression = null;
-        try {
-            cronExpression = new CronExpression(cronExpressionString, timeZone);
-        } catch (ParseException ex) {
-            LOG.error("Failed to add schedule job", ex);
-            return;
-        }
+        PoolUtils.doWorkInPoolNicely(this.pool, new PoolUtils.PoolWork<Jedis, Void>() {
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public Void doWork(final Jedis jedis) throws Exception {
+                CronExpression cronExpression = null;
+                try {
+                    cronExpression = new CronExpression(cronExpressionString, timeZone);
+                } catch (ParseException ex) {
+                    LOG.error("Failed to add schedule job", ex);
+                    throw ex;
+                }
 
-        Jedis redis = pool.getResource();
+                //add schedule
+                ScheduledJob scheduledJob = new ScheduledJob();
+                scheduledJob.setName(jobName);
+                scheduledJob.setCronExpression(cronExpressionString);
+                scheduledJob.setArgs(args);
+                scheduledJob.setJesqueJobName(jesqueJobName);
+                scheduledJob.setJesqueJobQueue(jesqueJobQueue);
+                scheduledJob.setTimeZone(timeZone);
 
-        //add schedule
-        ScheduledJob scheduledJob = new ScheduledJob();
-        scheduledJob.setName(jobName);
-        scheduledJob.setCronExpression(cronExpressionString);
-        scheduledJob.setArgs(args);
-        scheduledJob.setJesqueJobName(jesqueJobName);
-        scheduledJob.setJesqueJobQueue(jesqueJobQueue);
-        scheduledJob.setTimeZone(timeZone);
+                scheduledJobDaoService.save(jedis, scheduledJob);
 
-        ScheduledJobPersistor.save(redis, scheduledJob);
+                //add trigger state
+                Trigger trigger = new Trigger();
+                trigger.setJobName(jobName);
+                trigger.setNextFireTime(cronExpression.getNextValidTimeAfter(new DateTime()));
+                trigger.setState(TriggerState.Waiting);
+                trigger.setAcquiredBy("");
 
-        //add trigger state
-        Trigger trigger = new Trigger();
-        trigger.setJobName(jobName);
-        trigger.setNextFireTime(cronExpression.getNextValidTimeAfter(new DateTime()));
-        trigger.setState(TriggerState.Waiting);
-        trigger.setAcquiredBy("");
+                triggerDaoService.save(jedis, trigger);
 
-        TriggerPersistor.save(redis, trigger);
+                //update trigger indexes
+                String key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_NEXTFIRE_INDEX);
+                jedis.zadd(key, trigger.getNextFireTime().getMillis(), jobName);
 
-        //update trigger indexes
-        redis.zadd(Trigger.TRIGGER_NEXTFIRE_INDEX, trigger.getNextFireTime().getMillis(), jobName);
-
-        pool.returnResource(redis);
-
+                return null;
+            }
+        });
     }
 
-    public void deleteSchedule(String name) {
-        Jedis redis = pool.getResource();
-        ScheduledJobPersistor.delete(redis, name);
-        TriggerPersistor.delete(redis, name);
-        pool.returnResource(redis);
+    public void deleteSchedule(final String name) {
+        PoolUtils.doWorkInPoolNicely(this.pool, new PoolUtils.PoolWork<Jedis, Void>() {
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public Void doWork(final Jedis jedis) throws Exception {
+                scheduledJobDaoService.delete(jedis, name);
+                triggerDaoService.delete(jedis, name);
+                return null;
+            }
+        });
     }
 
-    void enqueueReadyJobs(DateTime until, final String hostName) {
+    void processScheduledJobs(final DateTime until, final String hostName){
+        PoolUtils.doWorkInPoolNicely(this.pool, new PoolUtils.PoolWork<Jedis, Void>() {
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public Void doWork(final Jedis jedis) throws Exception {
+                DateTime now = new DateTime();
+                serverCheckIn(jedis, hostName, new DateTime());
+                cleanUpStaleServers(jedis);
+                enqueueReadyJobs(jedis, until, hostName);
+                return null;
+            }
+        });
+    }
+
+    void enqueueReadyJobs(Jedis jedis, DateTime until, final String hostName) {
         LOG.info("enqueueReadyJobs at time " + until.toString());
         //check to see if there are any servers that have missed removing check-in
         //if so get the intersection of WATIING jobs that are not in the nextFireTimeIndex and add
-        final List<Tuple> acquiredJobs = acquireJobs(until, 1, hostName);
-
-
+        final List<Tuple> acquiredJobs = acquireJobs(jedis, until, 1, hostName);
         LOG.info("acquiredJobs size: " + acquiredJobs.size());
-
         if( acquiredJobs == null || acquiredJobs.size() == 0)
             return;
-
         long earliestAcquiredJobTime = (long)acquiredJobs.get(0).getScore();
-
-        long delta = earliestAcquiredJobTime - DateTime.now().getMillis();
-
-        LOG.info("earliestAcquiredJobTime " + earliestAcquiredJobTime + ", delta " + delta);
-
-        if( delta > 0 ) {
-            LOG.debug("Waiting for fire time to enqueue jobs");
-
-            vertx.setTimer(delta, new Handler<Long>() {
-                @Override
-                public void handle(Long event) {
-                    enqueueJobs(acquiredJobs, hostName);
-                }
-            });
-        }
-        else{
-            enqueueJobs(acquiredJobs, hostName);
-        }
+        long delay = earliestAcquiredJobTime - DateTime.now().getMillis();
+        enqueueJobs(jedis, acquiredJobs, hostName, delay);
     }
 
-    private void enqueueJobs(List<Tuple> acquiredJobs, String hostName){
-
+    private void enqueueJobs(Jedis jedis, List<Tuple> acquiredJobs, String hostName, long delay){
         LOG.info("enqueueJobs acquiredJobs size " + acquiredJobs.size() + ", hostName " + hostName);
-
-        Jedis redis = pool.getResource();
         for (Tuple acquiredJob : acquiredJobs) {
-            enqueueJob(redis, acquiredJob.getElement(), hostName);
+            try {
+                enqueueJob(jedis, acquiredJob.getElement(), hostName, delay);
+            }
+            catch (Exception ex){
+                LOG.error("failed to enqueue job", ex);
+            }
         }
-        pool.returnResource(redis);
     }
 
-    private List<Tuple> acquireJobs(DateTime until, Integer number, String hostName) {
-
-        Jedis redis = pool.getResource();
-
-        //retrieving min time trigger
-        Set<Tuple> allJobs = redis.zrangeWithScores(Trigger.TRIGGER_NEXTFIRE_INDEX, 0, number - 1);
-
+    private List<Tuple> acquireJobs(Jedis redis, final DateTime until, final Integer number, final String hostName) {
+        String key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_NEXTFIRE_INDEX);
+        Set<Tuple> allJobs = redis.zrangeWithScores(key, 0, number - 1);
         LOG.info("allJobs size " + allJobs.size());
-
         Set<Tuple> waitingJobs = new HashSet<>();
-
         for (Tuple job : allJobs) {
             if(job.getScore() <= until.getMillis()){
                 waitingJobs.add(job);
@@ -191,8 +199,10 @@ public class JesqueScheduleService {
             if(waitingJob.getScore() == earliestWaitingJobTime.getScore()){
                 String jobName = waitingJob.getElement();
 
-                redis.watch(Trigger.getRedisKeyForJobName(jobName));
-                Trigger trigger = TriggerPersistor.findByJobName(redis, jobName);
+                key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, jobName);
+
+                redis.watch(key);
+                Trigger trigger = triggerDaoService.findByJobName(redis, jobName);
                 if( trigger.getState() != TriggerState.Waiting ) {
                     LOG.debug("Trigger not in waiting state for job " + jobName);
                     redis.unwatch();
@@ -203,9 +213,12 @@ public class JesqueScheduleService {
                 Transaction transaction = redis.multi();
                 List<Object> transactionResult = null;
                 try{
-                    transaction.hmset(trigger.getRedisKey(), trigger.toRedisHash());
-                    transaction.zrem(Trigger.TRIGGER_NEXTFIRE_INDEX, jobName);
-                    transaction.sadd(Trigger.getAcquiredIndexByHostName(hostName), jobName);
+                    key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, trigger.getJobName());
+                    transaction.hmset(key, trigger.toRedisHash());
+                    key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_NEXTFIRE_INDEX);
+                    transaction.zrem(key, jobName);
+                    key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, "state", TriggerState.Acquired.name(), hostName);
+                    transaction.sadd(key, jobName);
                     transactionResult = transaction.exec();
                 } catch (Exception exception) {
                     LOG.error("Exception setting trigger state, discarding transaction", exception);
@@ -220,33 +233,30 @@ public class JesqueScheduleService {
         }
 
         return acquiredJobs;
+
     }
 
-    private void enqueueJob(Jedis redis, String jobName, String hostName) {
+    private void enqueueJob(Jedis redis, String jobName, String hostName, final long delay) throws Exception {
         LOG.info("Enqueuing job " + jobName);
-        redis.watch(Trigger.getRedisKeyForJobName(jobName));
-        ScheduledJob scheduledJob = ScheduledJobPersistor.findByName(redis, jobName);
+        String key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, jobName);
+        redis.watch(key);
+        ScheduledJob scheduledJob = scheduledJobDaoService.findByName(redis, jobName);
         Trigger trigger = scheduledJob.getTrigger();
-        if( trigger.getState() != TriggerState.Acquired ) {
+        key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, "state", TriggerState.Acquired.name(), hostName);
+        if(trigger.getState() != TriggerState.Acquired ) {
             LOG.warn("Trigger state is no longer " + TriggerState.Acquired.name() + " for job " + jobName);
-            redis.srem(Trigger.getAcquiredIndexByHostName(hostName), jobName);
+            redis.srem(key, jobName);
             redis.unwatch();
             return;
         }
         if(!hostName.equals(trigger.getAcquiredBy())) {
             LOG.warn("Trigger state was acquired by another server " + trigger.getAcquiredBy() +" for job " + jobName);
-            redis.srem(Trigger.getAcquiredIndexByHostName(hostName), jobName);
+            redis.srem(key, jobName);
             redis.unwatch();
             return;
         }
 
-        CronExpression cronExpression = null;
-        try {
-            cronExpression = new CronExpression(scheduledJob.getCronExpression(), scheduledJob.getTimeZone());
-        } catch (ParseException e) {
-            LOG.error("enqueueJob failed due to invalid cronExpression");
-            return;
-        }
+        CronExpression cronExpression = new CronExpression(scheduledJob.getCronExpression(), scheduledJob.getTimeZone());
 
         trigger.setNextFireTime(cronExpression.getNextValidTimeAfter(new DateTime()));
         trigger.setState(TriggerState.Waiting);
@@ -254,20 +264,23 @@ public class JesqueScheduleService {
 
         Job job = new Job(scheduledJob.getJesqueJobName(), scheduledJob.getArgs());
 
-        String jobJson = null;
-        try {
-            jobJson = ObjectMapperFactory.get().writeValueAsString(job);
-        } catch (JsonProcessingException e) {
-            LOG.error("enqueueJob failed due to invalid job json");
-            return;
-        }
+        String jobJson = ObjectMapperFactory.get().writeValueAsString(job);
 
         Transaction transaction = redis.multi();
         try{
-            transaction.sadd(service.jesqueConfig().getNamespace() + ":" + ResqueConstants.QUEUES, scheduledJob.getJesqueJobQueue());
-            transaction.rpush(getRedisKeyForQueueName(scheduledJob.getJesqueJobQueue()), jobJson);
-            transaction.hmset(trigger.getRedisKey(), trigger.toRedisHash());
-            transaction.zadd(Trigger.TRIGGER_NEXTFIRE_INDEX, trigger.getNextFireTime().getMillis(), jobName);
+
+            key = JesqueUtils.createKey(namespace, ResqueConstants.QUEUES);
+            transaction.sadd(key, scheduledJob.getJesqueJobQueue());
+            key = JesqueUtils.createKey(namespace, ResqueConstants.QUEUE, scheduledJob.getJesqueJobQueue());
+            transaction.rpush(key, jobJson);
+
+            key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, trigger.getJobName());
+
+            transaction.hmset(key, trigger.toRedisHash());
+
+            key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_NEXTFIRE_INDEX);
+
+            transaction.zadd(key, trigger.getNextFireTime().getMillis(), jobName);
             if( transaction.exec() == null ) {
                 LOG.warn("Job exection aborted for " + jobName + " because the trigger data changed");
             }
@@ -277,44 +290,35 @@ public class JesqueScheduleService {
         }
 
         //always remove index regardless of the result of the enqueue
-        redis.srem(Trigger.getAcquiredIndexByHostName(hostName), jobName);
+        key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, "state", TriggerState.Acquired.name(), hostName);
+        redis.srem(key, jobName);
     }
 
-    void serverCheckIn(String hostName, DateTime checkInDate) {
-        Jedis redis = null;
-        try {
-            redis = pool.getResource();
-            //TODO: detect checkins by another server of the same name
 
-            String key = JesqueUtils.createKey(namespace, SCHEDULER_PREFIX, "checkIn");
-
-            redis.hset(key, hostName, String.valueOf(checkInDate.getMillis()));
-        }
-        finally {
-            pool.returnResource(redis);
-        }
-
-    }
-
-    void cleanUpStaleServers() {
-        Jedis redis = pool.getResource();
-        DateTime now = new DateTime();
-
+    private void serverCheckIn(Jedis jedis, String hostName, DateTime checkInDate) {
         String key = JesqueUtils.createKey(namespace, SCHEDULER_PREFIX, "checkIn");
+        jedis.hset(key, hostName, String.valueOf(checkInDate.getMillis()));
+    }
 
-        Map<String, String> serverCheckInHash = redis.hgetAll(key);
+
+    private void cleanUpStaleServers(Jedis jedis) {
+
+        DateTime now = new DateTime();
+        String key = JesqueUtils.createKey(namespace, SCHEDULER_PREFIX, "checkIn");
+        Map<String, String> serverCheckInHash = jedis.hgetAll(key);
         for (Map.Entry<String, String> entry : serverCheckInHash.entrySet()) {
             Seconds sec = Seconds.secondsBetween(new DateTime(Long.parseLong(entry.getValue())), now);
             if(sec.getSeconds() > STALE_SERVER_SECONDS){
-                cleanUpStaleServer(redis, entry.getKey());
+                cleanUpStaleServer(jedis, entry.getKey());
             }
         }
-        pool.returnResource(redis);
     }
 
     private void cleanUpStaleServer(Jedis redis, String hostName) {
         LOG.info("Cleaning up stale server $hostName");
-        String staleServerAcquiredJobsSetName = Trigger.getAcquiredIndexByHostName(hostName);
+
+        String staleServerAcquiredJobsSetName = getAcquiredIndexByHostName(hostName);
+
         Set<String> staleJobNames = redis.smembers(staleServerAcquiredJobsSetName);
         Map<String, Long> triggerFireTime = new HashMap<>();
         String key;
@@ -329,16 +333,15 @@ public class JesqueScheduleService {
 
         try{
             //put jobs back to redis
-
             for (String staleJobName : staleJobNames) {
                 key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, staleJobName);
                 transaction.hset(key, TriggerField.State.name(), TriggerState.Waiting.name());
                 transaction.hset(key, TriggerField.AcquiredBy.name(), "");
-                transaction.zadd(JesqueUtils.createKey(namespace, Trigger.TRIGGER_NEXTFIRE_INDEX), triggerFireTime.get(staleJobName), staleJobName);
+                key = JesqueUtils.createKey(namespace, Trigger.TRIGGER_NEXTFIRE_INDEX);
+                transaction.zadd(key, triggerFireTime.get(staleJobName), staleJobName);
             }
 
             key = JesqueUtils.createKey(namespace, SCHEDULER_PREFIX, "checkIn");
-
             transaction.del(staleServerAcquiredJobsSetName);
             transaction.hdel(key, hostName);
             transaction.exec();
@@ -348,10 +351,9 @@ public class JesqueScheduleService {
         }
     }
 
-    public String getRedisKeyForQueueName(String queueName) {
-        return service.jesqueConfig().getNamespace() + ":" + ResqueConstants.QUEUE + ":" + queueName;
+      private String getAcquiredIndexByHostName(String hostName) {
+        return JesqueUtils.createKey(namespace, Trigger.TRIGGER_PREFIX, "state", TriggerState.Acquired.name(), hostName);
     }
-
 
 
 

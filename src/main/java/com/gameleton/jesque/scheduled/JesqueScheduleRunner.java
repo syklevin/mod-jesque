@@ -27,20 +27,15 @@ public class JesqueScheduleRunner {
     public JesqueScheduleRunner(JesqueScheduleService schedulerService, Vertx vertx, String hostName){
         this.schedulerService = schedulerService;
         this.vertx = vertx;
-        this.hostName = hostName;
+        this.hostName = ensureHostName(hostName);
         this.timerId = -1;
     }
 
     public JesqueScheduleRunner(JesqueScheduleService schedulerService, Vertx vertx){
         this.schedulerService = schedulerService;
         this.vertx = vertx;
+        this.hostName = ensureHostName(null);
         this.timerId = -1;
-        try {
-            this.hostName = InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException e) {
-            this.hostName = "localhost";
-        };
-
     }
 
     public void start(){
@@ -61,19 +56,18 @@ public class JesqueScheduleRunner {
     }
 
     private void mainLoop(){
-        schedulerService.serverCheckIn(getHostName(), new DateTime());
-        schedulerService.cleanUpStaleServers();
-        DateTime findJobsUntil = new DateTime().plusMillis((int)IDLE_WAIT_TIME);
-        schedulerService.enqueueReadyJobs(findJobsUntil, getHostName());
-        timerId = this.vertx.setTimer(IDLE_WAIT_TIME, new Handler<Long>() {
+        DateTime now = new DateTime();
+        schedulerService.processScheduledJobs(now, hostName);
+        timerId = this.vertx.setPeriodic(IDLE_WAIT_TIME, new Handler<Long>() {
             @Override
-            public void handle(Long event) {
-                mainLoop();
+            public void handle(Long delta) {
+                DateTime findJobsUntil = new DateTime().plusMillis(delta.intValue());
+                schedulerService.processScheduledJobs(findJobsUntil, hostName);
             }
         });
     }
 
-    public String getHostName() {
+    private String ensureHostName(String hostName) {
         if( hostName == null ) {
             try {
                 hostName = InetAddress.getLocalHost().getHostName();
@@ -81,7 +75,6 @@ public class JesqueScheduleRunner {
                 hostName = "localhost";
             }
         }
-
         return hostName;
     }
 }

@@ -36,17 +36,17 @@ public class Trigger {
         return map;
     }
 
-    public String getRedisKey() {
-        return TRIGGER_PREFIX + ":" + getJobName();
-    }
+//    public String getRedisKey() {
+//        return TRIGGER_PREFIX + ":" + getJobName();
+//    }
 
-    public static String getRedisKeyForJobName(String jobName) {
-        return TRIGGER_PREFIX + ":" + jobName;
-    }
-
-    public static String getAcquiredIndexByHostName(String hostName) {
-        return TRIGGER_PREFIX + ":state:" + TriggerState.Acquired.name() + ":" + hostName;
-    }
+//    public static String getRedisKeyForJobName(String jobName) {
+//        return TRIGGER_PREFIX + ":" + jobName;
+//    }
+//
+//    public static String getAcquiredIndexByHostName(String hostName) {
+//        return TRIGGER_PREFIX + ":state:" + TriggerState.Acquired.name() + ":" + hostName;
+//    }
 
     public String getJobName() {
         return jobName;

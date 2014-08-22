@@ -1,9 +1,8 @@
 package com.gameleton.jesque.admin;
 
 import com.gameleton.jesque.scheduled.ScheduledJob;
-import com.gameleton.jesque.scheduled.ScheduledJobPersistor;
+import com.gameleton.jesque.scheduled.ScheduledJobDaoService;
 import com.gameleton.jesque.util.ResqueDataParser;
-import com.gameleton.jesque.util.StringUtils;
 import net.greghaines.jesque.Config;
 import net.greghaines.jesque.ConfigBuilder;
 import net.greghaines.jesque.JobFailure;
@@ -21,13 +20,7 @@ import net.greghaines.jesque.meta.dao.impl.WorkerInfoDAORedisImpl;
 import net.greghaines.jesque.utils.PoolUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.vertx.java.core.AsyncResult;
-import org.vertx.java.core.AsyncResultHandler;
-import org.vertx.java.core.Handler;
 import org.vertx.java.core.Vertx;
-import org.vertx.java.core.http.HttpServer;
-import org.vertx.java.core.http.HttpServerRequest;
-import org.vertx.java.core.http.RouteMatcher;
 import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
 import redis.clients.jedis.Jedis;
@@ -47,6 +40,7 @@ public class JesqueAdminServiceImpl {
     private final JsonObject config;
     private final Config jesqueConfig;
     private final Pool<Jedis> pool;
+    private final ScheduledJobDaoService scheduledJobDaoService;
 
     private FailureDAO failureDAO;
     private KeysDAO keysDAO;
@@ -72,6 +66,7 @@ public class JesqueAdminServiceImpl {
         keysDAO = new KeysDAORedisImpl(jesqueConfig, pool);
         queueInfoDAO = new QueueInfoDAORedisImpl(jesqueConfig, pool);
         workerInfoDAO = new WorkerInfoDAORedisImpl(jesqueConfig, pool);
+        scheduledJobDaoService = new ScheduledJobDaoService(jesqueConfig, pool);
     }
 
     public JsonObject getOverview(){
@@ -167,9 +162,7 @@ public class JesqueAdminServiceImpl {
     }
 
     public JsonObject getScheduled(String statType){
-        Jedis redis = pool.getResource();
-        List<ScheduledJob> ScheduledJobs = ScheduledJobPersistor.getAll(redis);
-        pool.returnResource(redis);
+        List<ScheduledJob> ScheduledJobs = scheduledJobDaoService.getAll();
         JsonObject rootNode = new JsonObject();
         JsonArray list = new JsonArray();
         for (ScheduledJob scheduledJob : ScheduledJobs) {
