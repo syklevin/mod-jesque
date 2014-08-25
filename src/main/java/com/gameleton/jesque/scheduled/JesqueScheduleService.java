@@ -42,6 +42,7 @@ public class JesqueScheduleService {
     private final String namespace;
     private final ScheduledJobDaoService scheduledJobDaoService;
     private final TriggerDaoService triggerDaoService;
+    private JesqueScheduleRunner jesqueScheduleRunner;
 
     public Vertx vertx() {
       return vertx;
@@ -54,6 +55,15 @@ public class JesqueScheduleService {
         this.namespace = service.jesqueConfig().getNamespace();
         this.scheduledJobDaoService = new ScheduledJobDaoService(service.jesqueConfig(), service.pool());
         this.triggerDaoService = new TriggerDaoService(service.jesqueConfig(), service.pool());
+        this.jesqueScheduleRunner = new JesqueScheduleRunner(this, vertx);
+    }
+
+    public void start(){
+        jesqueScheduleRunner.start();
+    }
+
+    public void stop(){
+        jesqueScheduleRunner.stop();
     }
 
     public void schedule(String jobName, String cronExpressionString, String jesqueJobQueue, String jesqueJobName, Object... args) {

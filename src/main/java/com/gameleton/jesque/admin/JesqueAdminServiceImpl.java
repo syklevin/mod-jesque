@@ -6,6 +6,8 @@ import com.gameleton.jesque.util.ResqueDataParser;
 import net.greghaines.jesque.Config;
 import net.greghaines.jesque.ConfigBuilder;
 import net.greghaines.jesque.JobFailure;
+import net.greghaines.jesque.admin.AdminClient;
+import net.greghaines.jesque.admin.AdminClientImpl;
 import net.greghaines.jesque.meta.KeyInfo;
 import net.greghaines.jesque.meta.QueueInfo;
 import net.greghaines.jesque.meta.WorkerInfo;
@@ -42,6 +44,8 @@ public class JesqueAdminServiceImpl {
     private final Pool<Jedis> pool;
     private final ScheduledJobDaoService scheduledJobDaoService;
 
+//    private AdminClient jesqueAdminClient;
+
     private FailureDAO failureDAO;
     private KeysDAO keysDAO;
     private QueueInfoDAO queueInfoDAO;
@@ -50,18 +54,14 @@ public class JesqueAdminServiceImpl {
     public JesqueAdminServiceImpl(Vertx vertx, JsonObject config){
         this.vertx = vertx;
         this.config = config;
-
         ConfigBuilder builder = new ConfigBuilder();
-
         JsonObject jesqueCfg = config.getObject("jesque");
-
         builder.withHost(jesqueCfg.getString("redis_host"))
                 .withPort(jesqueCfg.getInteger("redis_port"))
                 .withNamespace(jesqueCfg.getString("redis_namespace"));
-
         this.jesqueConfig = builder.build();
         this.pool = PoolUtils.createJedisPool(jesqueConfig);
-
+//        this.jesqueAdminClient = new AdminClientImpl(jesqueConfig);
         failureDAO = new FailureDAORedisImpl(jesqueConfig, pool);
         keysDAO = new KeysDAORedisImpl(jesqueConfig, pool);
         queueInfoDAO = new QueueInfoDAORedisImpl(jesqueConfig, pool);
@@ -171,4 +171,23 @@ public class JesqueAdminServiceImpl {
         rootNode.putArray("scheduledJobs", list);
         return rootNode;
     }
+
+//    public void pauseAllWorkersInCluster() {
+//        LOG.debug("Pausing all workers in the cluster");
+//        jesqueAdminClient.togglePausedWorkers(true);
+//    }
+//
+//    public void resumeAllWorkersInCluster() {
+//        LOG.debug("Resuming all workers in the cluster");
+//        jesqueAdminClient.togglePausedWorkers(false);
+//    }
+//
+//    public void shutdownAllWorkersInCluster() {
+//        LOG.debug("Shutting down all workers in the cluster");
+//        jesqueAdminClient.shutdownWorkers(true);
+//    }
+//
+//    public boolean areAllWorkersInClusterPaused() {
+//        return workerInfoDAO.getActiveWorkerCount() == 0;
+//    }
 }

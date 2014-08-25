@@ -40,32 +40,41 @@ public class JesqueService {
     private final Vertx vertx;
     private final JsonObject config;
     private final Injector injector;
+    private final String instanceId;
+    private Config jesqueConfig;
+    private Pool<Jedis> pool;
+    private JesqueScheduleService jesqueScheduleService;
+    private Client jesqueClient;
+
+
+    private List<Worker> workers = Collections.synchronizedList(new ArrayList<Worker>());
 
     public Vertx vertx() {
       return vertx;
     }
-    private Config jesqueConfig;
+
     public Config jesqueConfig() {
       return jesqueConfig;
     }
-    private Pool<Jedis> pool;
+
     public Pool<Jedis> pool() {
       return pool;
     }
 
-    private JesqueScheduleService jesqueScheduleService;
-    private JesqueScheduleRunner jesqueScheduleRunner;
+    public String instanceId() {
+      return instanceId;
+    }
 
-    private Client jesqueClient;
-    private WorkerInfoDAO workerInfoDao;
-    private List<Worker> workers = Collections.synchronizedList(new ArrayList<Worker>());
-    private AdminClient jesqueAdminClient;
+    public List<Worker> workers() {
+      return workers;
+    }
 
     @Inject
     public JesqueService(Vertx vertx, Injector injector){
         this.vertx = vertx;
         this.injector = injector;
         this.config = new JsonObject();
+        this.instanceId = UUID.randomUUID().toString();
     }
 
     public void configure(JsonObject config){
@@ -80,25 +89,36 @@ public class JesqueService {
                 .withPort(jesqueCfg.getInteger("redis_port"))
                 .withNamespace(jesqueCfg.getString("redis_namespace"));
         this.jesqueConfig = builder.build();
-        JedisPoolConfig poolConfig = new JedisPoolConfig();
-        this.pool = PoolUtils.createJedisPool(jesqueConfig, poolConfig);
-        this.workerInfoDao = new WorkerInfoDAORedisImpl(jesqueConfig, pool);
+        this.pool = PoolUtils.createJedisPool(jesqueConfig, new JedisPoolConfig());
         this.jesqueClient = new ClientImpl(jesqueConfig);
-        this.jesqueAdminClient = new AdminClientImpl(jesqueConfig);
-        //this.jesqueDelayedJobService = new JesqueDelayedJobService(this);
-        //this.jesqueDelayedJobRunner = new JesqueDelayedJobRunner(jesqueDelayedJobService, vertx, 20000);
+
         this.jesqueScheduleService = new JesqueScheduleService(this);
-        this.jesqueScheduleRunner = new JesqueScheduleRunner(jesqueScheduleService, vertx);
-        //jesqueDelayedJobRunner.start();
-        jesqueScheduleRunner.start();
+
         JsonArray workersCfg = config.getArray("workers");
-        JsonArray jobsCfg = config.getArray("jobs");
         startWorkersFromConfig(workersCfg);
+        JsonArray jobsCfg = config.getArray("jobs");
         startJobsFromConfig(jobsCfg);
+
+        this.jesqueScheduleService.start();
+
     }
 
-    public void schedule(String jobName, String cronExpressionString, String jesqueJobQueue, String jesqueJobName, Object... args) {
-        jesqueScheduleService.schedule(jobName, cronExpressionString, jesqueJobQueue, jesqueJobName, Arrays.asList(args));
+    public void stop() {
+        LOG.info("Stopping ${workers.size()} jesque workers");
+        jesqueScheduleService.stop();
+
+        workers.forEach(worker -> {
+            try{
+                LOG.debug("Stopping worker processing queues: " + worker.getQueues());
+                worker.end(true);
+//                worker.join(1000);
+            } catch(Exception ex) {
+                LOG.error("Exception ending jesque worker", ex);
+            }
+        });
+        workers.clear();
+
+        pool.destroy();
     }
 
     public void schedule(String jobName, String cronExpressionString, String jesqueJobQueue, String jesqueJobName, List args) {
@@ -125,80 +145,30 @@ public class JesqueService {
         enqueue(queueName, jobClazz.getSimpleName(), args);
     }
 
-    public void enqueue(String queueName, String jobName, Object... args) {
-        enqueue(queueName, new Job(jobName, args));
-    }
-
-    public void enqueue(String queueName, Class jobClazz, Object... args) {
-        enqueue(queueName, jobClazz.getSimpleName(), args);
-    }
-
     public void priorityEnqueue(String queueName, Job job) {
         jesqueClient.priorityEnqueue(queueName, job);
     }
 
-    public void priorityEnqueue(String queueName, String jobName, Object... args) {
+    public void priorityEnqueue(String queueName, String jobName, List args) {
         priorityEnqueue(queueName, new Job(jobName, args));
     }
 
-    public void priorityEnqueue(String queueName, Class jobClazz, Object... args) {
+    public void priorityEnqueue(String queueName, Class jobClazz, List args) {
         priorityEnqueue(queueName, jobClazz.getSimpleName(), args);
     }
 
-//    @Override
-//    public void enqueueAt(DateTime dateTime, String queueName, Job job) {
-//        try {
-//            jesqueDelayedJobService.enqueueAt(dateTime, queueName, job);
-//        } catch (JsonProcessingException e) {
-//            e.printStackTrace();
-//        }
-//    }
-//
-//    @Override
-//    public void enqueueAt(DateTime dateTime, String queueName, String jobName, Object... args) {
-//        enqueueAt( dateTime, queueName, new Job(jobName, args) );
-//    }
-//
-//    @Override
-//    public void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, Object... args) {
-//        enqueueAt( dateTime, queueName, jobClazz.getSimpleName(), args);
-//    }
-//
-//    @Override
-//    public void enqueueAt(DateTime dateTime, String queueName, String jobName, List args) {
-//        enqueueAt( dateTime, queueName, new Job(jobName, args) );
-//    }
-//
-//    @Override
-//    public void enqueueAt(DateTime dateTime, String queueName, Class jobClazz, List args) {
-//        enqueueAt( dateTime, queueName, jobClazz.getSimpleName(), args );
-//    }
+    public void delayEnqueue(long millisecondDelay, String queueName, Job job) {
+        jesqueClient.delayedEnqueue(queueName, job, millisecondDelay);
+    }
 
+    public void delayEnqueue(long millisecondDelay, String queueName, String jobName, List args) {
+        delayEnqueue(millisecondDelay, queueName, new Job(jobName, args));
+    }
 
-//    @Override
-//    public void enqueueIn(Integer millisecondDelay, String queueName, Job job) {
-//        enqueueAt( new DateTime().plusMillis(millisecondDelay), queueName, job );
-//    }
-//
-//    @Override
-//    public void enqueueIn(Integer millisecondDelay, String queueName, String jobName, Object... args) {
-//        enqueueIn( millisecondDelay, queueName, new Job(jobName, args) );
-//    }
-//
-//    @Override
-//    public void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, Object... args) {
-//        enqueueIn( millisecondDelay, queueName, jobClazz.getSimpleName(), args );
-//    }
-//
-//    @Override
-//    public void enqueueIn(Integer millisecondDelay, String queueName, String jobName, List args) {
-//        enqueueIn( millisecondDelay, queueName, new Job(jobName, args) );
-//    }
-//
-//    @Override
-//    public void enqueueIn(Integer millisecondDelay, String queueName, Class jobClazz, List args) {
-//        enqueueIn( millisecondDelay, queueName, jobClazz.getSimpleName(), args );
-//    }
+    public void delay(long millisecondDelay, String queueName, Class jobClazz, List args) {
+        delayEnqueue(millisecondDelay, queueName, jobClazz.getSimpleName(), args);
+    }
+
 
     public Worker startWorker(String queueName, String jobName, Class jobClass, ExceptionHandler exceptionHandler,
                               boolean paused)
@@ -249,8 +219,14 @@ public class JesqueService {
 //        });
 
         //add listener for removing workers list when it stopped
-        WorkerLifecycleListener workerLifeCycleListener = new WorkerLifecycleListener(this);
-        worker.getWorkerEventEmitter().addListener(workerLifeCycleListener, WorkerEvent.WORKER_STOP);
+        worker.getWorkerEventEmitter().addListener(new WorkerListener() {
+            @Override
+            public void onEvent(WorkerEvent event, Worker worker, String queue, Job job, Object runner, Object result, Exception ex) {
+                if( event == WorkerEvent.WORKER_STOP ) {
+                    workers.remove(worker);
+                }
+            }
+        }, WorkerEvent.WORKER_STOP);
 
         vertx.runOnContext(new Handler<Void>() {
             @Override
@@ -258,28 +234,7 @@ public class JesqueService {
                 worker.run();
             }
         });
-
-
-
         return worker;
-    }
-
-    public void stop() {
-        LOG.info("Stopping ${workers.size()} jesque workers");
-
-        //jesqueDelayedJobRunner.stop();
-
-        jesqueScheduleRunner.stop();
-
-        workers.forEach(worker -> {
-            try{
-                LOG.debug("Stopping worker processing queues: " + worker.getQueues());
-                worker.end(true);
-                //worker.join(5000);
-            } catch(Exception ex) {
-                LOG.error("Exception ending jesque worker", ex);
-            }
-        });
     }
 
     void startJobsFromConfig(JsonArray jobsCfg) {
@@ -297,9 +252,8 @@ public class JesqueService {
                 schedule(cronName, cronExpression, jobQueue, jobName, args);
             }
             else if(jobCfg.containsField("deplay")){
-//                int delay = jobCfg.getInteger("deplay");
-//                enqueueIn(delay, jobQueue, jobName, args);
-                LOG.info("deplay job not implemented");
+                long delay = jobCfg.getLong("deplay");
+                delayEnqueue(delay, jobQueue, jobName, args);
             }
             else{
                 enqueue(jobQueue, jobName, args);
@@ -327,26 +281,6 @@ public class JesqueService {
         }
     }
 
-    public void pruneWorkers() {
-        try {
-            final String hostName = InetAddress.getLocalHost().getHostName();
-            List<WorkerInfo> workerInfos = workerInfoDao.getAllWorkers();
-            workerInfos.forEach(workerInfo -> {
-                if(hostName.equals(workerInfo.getHost())){
-                    LOG.debug("Removing stale worker $workerInfo.name");
-                    workerInfoDao.removeWorker(workerInfo.getName());
-                }
-            });
-
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void removeWorkerFromLifecycleTracking(Worker worker) {
-        LOG.debug("Removing worker " + worker.getName() + " from lifecycle tracking");
-        workers.remove(worker);
-    }
 
     public void pauseAllWorkersOnThisNode() {
         LOG.info("Pausing all " + workers.size() + " jesque workers on this node");
@@ -366,22 +300,4 @@ public class JesqueService {
         });
     }
 
-    public void pauseAllWorkersInCluster() {
-        LOG.debug("Pausing all workers in the cluster");
-        jesqueAdminClient.togglePausedWorkers(true);
-    }
-
-    public void resumeAllWorkersInCluster() {
-        LOG.debug("Resuming all workers in the cluster");
-        jesqueAdminClient.togglePausedWorkers(false);
-    }
-
-    public void shutdownAllWorkersInCluster() {
-        LOG.debug("Shutting down all workers in the cluster");
-        jesqueAdminClient.shutdownWorkers(true);
-    }
-
-    public boolean areAllWorkersInClusterPaused() {
-        return workerInfoDao.getActiveWorkerCount() == 0;
-    }
 }
